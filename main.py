@@ -1,169 +1,143 @@
 import csv
-import json
-import os
 import argparse
-import logging
+import os
+import jsonpickle
+from io import StringIO
 from moviepy.editor import VideoFileClip
 
 
-CSV_HEADER_PREFIX = "# CSV_HEADER = "
-# Define a function to copy a file while removing lines with '#' and a specific prefix.
-# This function takes the 'folder_path', 'base_name', and 'extension' of the file to be copied.
-# It reads the original file, removes lines starting with '#' and a specific prefix, and creates a new temporary file.
-# Parameters:
-#   - folder_path: The path to the folder containing the original file.
-#   - base_name: The base name of the original file.
-#   - extension: The file extension (including the dot) of the original file.
-# Returns:
-#   - The path to the newly created temporary file.
-def copy_file_without_header_comment(filename):
-    
-    base_name, extension = os.path.splitext(filename)
-    new_file_name = base_name + '_temp' + extension
+class ViaCSVReader:
+    def __init__(self, csv_folder):
+        self.data = []
+        self.read(csv_folder)
 
-    try:
-        with open(filename, 'r') as original_file:
-            modified_lines = [line.replace(CSV_HEADER_PREFIX, '')
-                              for line in original_file.readlines()
-                              if not line.startswith('#') or 'CSV_HEADER' in line]
+    def read(self, csv_folder):
+        for csv_file in self.get_csv_list(csv_folder):
+            for row in csv.DictReader(StringIO(self.process_csv_header(csv_file))):
+                file_name = jsonpickle.decode(row['file_list'])[0]
+                label = jsonpickle.decode(row['metadata'])['1']
+                temporal_coordinates = jsonpickle.decode(
+                    row['temporal_coordinates'])
 
-        with open(new_file_name, 'w') as new_file:
-            new_file.writelines(modified_lines)
+                self.data.append((file_name, label, temporal_coordinates))
 
-            return new_file_name
-    except FileNotFoundError:
-        print(f'Error: File not found - {filename}')
-        return None
-    except Exception as e:
-        print(f'Error: {e}')
-        return None
+    def get_csv_list(self, csv_folder):
+        return [os.path.join(csv_folder, filename)
+                for filename in os.listdir(csv_folder)
+                if filename.endswith('.csv')]
 
+    def process_csv_header(self, filename):
+        try:
+            with open(filename, 'r') as original_file:
+                modified_text = '\n'.join(line.replace('# CSV_HEADER = ', '')
+                                          for line in original_file.readlines()
+                                          if not (line.startswith('#') and 'CSV_HEADER' not in line))
 
-# Define a function to read data from a CSV file and populate an annotation list.
-# This function takes a CSV file name and an annotation list as input. It processes each row in the CSV file,
-# extracts relevant information, and adds it to the annotation list in a structured format.
-# Parameters:
-#   - csv_name: The name of the CSV file containing video annotations.
-#   - annotation_list: A dictionary to store video annotations.
-def update_annotation_list_from_csv(csv_name, video_folder, annotation_list):
-    # Define initial annotation template for videos
-    annotation_template = {
-        'annotations': [],
-        'duration': 0.0,
-        'resolution': '',
-        'subset': '',
-        'url': ''
-    }
-    sub_annotation_template = {'label': '', 'segment': []}
+                return modified_text
+        except FileNotFoundError:
+            print(f'Error: File not found - {filename}')
+            return None
+        except Exception as e:
+            print(f'Error: {e}')
+            return None
 
-    # taxonomy = json.loads
-
-    # Open and read the CSV file
-    with open(csv_name, newline='') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            file_name, extension = os.path.splitext(
-                json.loads(row['file_list'])[0])
-
-            temporal_coordinates = json.loads(row['temporal_coordinates'])
-            label = json.loads(row['metadata'])['1']
-            label_id = row['metadata_id']
-
-            # Create a new annotation object for the video
-            sub_annotation = sub_annotation_template.copy()
-            sub_annotation['label'] = label
-            sub_annotation['segment'] = temporal_coordinates
-
-            # If the video file is not already in the annotation list, add it
-            if file_name not in annotation_list:
-                annotation_list[file_name] = annotation_template
-
-            # Update the annotation information for the video
-            annotation_list[file_name]['annotations'].append(sub_annotation)
-            annotation_list[file_name]['subset'] = 'training'
-            
-            if video_folder is not None:
-                 # Get the video URL and extract its duration and resolution
-                video_url = get_video_url(file_name + extension, video_folder)
-                duration, resolution = get_video_info(video_url)
-                
-                annotation_list[file_name]['duration'] = duration
-                annotation_list[file_name]['resolution'] = resolution
-                annotation_list[file_name]['url'] = video_url
-            
-           
+    def __getitem__(self, index):
+        return self.data[index]
 
 
-# Define a function to retrieve video information, including duration and resolution.
-# This function attempts to open the video file specified by 'file_path' using the 'VideoFileClip' class from a video processing library.
-# It then extracts the video's duration and resolution and returns them as a tuple.
-# In case of any exceptions during video processing, an error message is printed, and None values are returned.
-# Parameters:
-#   - file_path: The path to the video file to be analyzed.
-# Returns:
-#   - A tuple containing the video's duration (in seconds) and resolution (as a tuple of width and height).
-#     If an error occurs, None values are returned.
-def get_video_info(file_path):
-    try:
-        video = VideoFileClip(file_path)
-        duration = video.duration
-        resolution = video.size
-        return duration, resolution
-    except Exception as e:
-        print(f"Error: {e}")
-        return None, None
+class ActivityNetParser:
+    def __init__(self, output_file, data):
+        self.output_file = output_file
+        self.annotation = {
+            'database': {},
+            'version': "VERSION 1.0",
+            'taxonomy': []
+        }
+        self._parse_annotation(data)
 
-# Define a function to generate a file URL based on the given file name.
-# This function first obtains the current working directory and then gets the parent directory.
-# It combines the parent directory and the provided file name using os.path.join() to create the file's URL.
-# Parameters:
-#   - file_name: The name of the file to be included in the URL.
-# Returns:
-#   - The URL of the file, which includes the parent directory and the specified file name.
+    def _parse_annotation(self, data):
+        for item in data:
+            basename, _ = os.path.splitext(item.filename)
+            self.annotation['database'][basename] = item
+
+            if basename in self.annotation['database']:
+                self.annotation['database'][basename].annotations.append(
+                    item.annotations[0])
+            else:
+                self.annotation['database'][basename] = item
+
+    def write_json_data(self):
+        try:
+            folder_path, _ = os.path.split(self.output_file)
+            os.makedirs(folder_path, exist_ok=True)
+
+            with open(self.output_file, "w") as json_file:
+                json_data = jsonpickle.encode(
+                    self.annotation, unpicklable=False, make_refs=False)
+                json_file.write(json_data)
+            print(f"JSON data written to {self.output_file}")
+        except Exception as e:
+            print(f"Error writing JSON data: {str(e)}")
 
 
-def get_video_url(file_name, video_folder=None):
-    base_path = os.getcwd() if video_folder is None else video_folder
+class VideoExtractor:
+    def __init__(self, folder, filename):
+        self.folder = folder
+        self.filename = filename
 
-    return os.path.join(base_path, file_name)
+    def get_info(self):
+        try:
+            url = os.path.join(self.folder or os.getcwd(), self.filename)
+            if os.path.exists(url):
+                video = VideoFileClip(url)
+                return (video.duration, video.size, url)
+            else:
+                return None
+        except Exception as e:
+            print(f"Error: {e}")
+            return None
 
 
-def process_annotation_files(annotation_folder, output_folder, video_folder=None):
-    try:
-        annotation_list = {}
-        
-        annotation_files = [os.path.join(annotation_folder, filename)
-                            for filename in os.listdir(annotation_folder)
-                            if filename.endswith('.csv')]
+class Annotation:
+    def __init__(self, filename, label, temporal_coordinates, video_info):
+        self.filename = filename
+        self.annotations = []
+        self.duration = video_info[0] if video_info is not None else 0
+        self.resolution = video_info[1] if video_info is not None else ''
+        self.url = video_info[2] if video_info is not None else ''
+        self.subset = 'training'
 
-        for annotation_file in annotation_files:
-            temp_file_path = copy_file_without_header_comment(annotation_file)
-            update_annotation_list_from_csv(temp_file_path, video_folder, annotation_list)
-            os.remove(temp_file_path)
+        self._add_label_segment(label, temporal_coordinates)
 
-        return annotation_list
+    def _add_label_segment(self, label, temporal_coordinates):
+        self.annotations.append(
+            {'label': label, 'segment': temporal_coordinates})
 
-    except Exception as e:
-        logging.error(f'An error occurred: {e}')
 
-# Define the main function
-def main(annotation_folder, output_folder, video_folder=None):
-    annotation_list = process_annotation_files(annotation_folder, output_folder, video_folder)
-    
-    if annotation_list:
-        print(annotation_list)
+def main(csv_folder, video_folder, output_filepath):
+    csv_data = []
+
+    for filename, label, coordinates in ViaCSVReader(csv_folder):
+        video_extractor = VideoExtractor(video_folder, filename)
+        csv_data.append(Annotation(
+            filename, label, coordinates, video_extractor.get_info()))
+
+    if len(csv_data) > 0:
+        parser = ActivityNetParser(output_filepath, csv_data)
+        parser.write_json_data()
     else:
         print("No annotation data found or an error occurred.")
 
-# Entry point of the script
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--annotation-folder', default='./annotations',
+    parser.add_argument('--csv-folder', default='./annotations',
                         help='Path to the folder containing CSV files.')
-    parser.add_argument('--output-folder', default='./output',
-                        help='Path to the folder for storing output files.')
     parser.add_argument('--video-folder', default=None,
                         help='Path to the folder containing video files.')
+    parser.add_argument('--output-file', default='./output/annotation.json',
+                        help='Path to the folder for storing output files.')
 
     args = parser.parse_args()
-    main(args.annotation_folder, args.output_folder, args.video_folder)
+
+    main(args.csv_folder, args.video_folder, args.output_file)

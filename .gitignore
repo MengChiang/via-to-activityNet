@@ -1,3 +1,4 @@
 annotations/*
 .vscode/settings.json
 taxonomy.json
+output/annotation.json
