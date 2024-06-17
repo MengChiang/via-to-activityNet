@@ -1,7 +1,6 @@
-annotations/*
-videos/*
+dataset/*
 output/*
-
+via_output/*
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -129,3 +128,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+

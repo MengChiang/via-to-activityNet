@@ -29,14 +29,17 @@ class Taxonomy:
 
         parent_id = 1
 
-        second_node_names = {label.parent_label for label in self.labels}
+        if self.labels:  # Ensure self.labels is not empty
+            print("First item in self.labels:", self.labels[0])
+
+        second_node_names = {label.label for label in self.labels}
 
         for second_node_name in second_node_names:
             self.nodes.append(self._create_node(
                 second_node_name, 'Root', parent_id))
 
         for label in self.labels:
-            parent_id, parent_name = self._find_node(label.parent_label)
+            parent_id, parent_name = self._find_node(label.label)
             for annotation in label.annotations:
                 self.nodes.append(self._create_node(
                     annotation['label'], parent_id, parent_name)

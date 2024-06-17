@@ -21,6 +21,8 @@ class ViaCSVReader:
                 video_filename = jsonpickle.decode(row['file_list'])[0]
                 parent_label = self._get_parent_label(csv_file, video_filename)
                 label = jsonpickle.decode(row['metadata'])['1']
+                if label == '1_CUTTING-SALMON':
+                    label = 'CUTTING-SALMON'
                 temporal_coordinates = jsonpickle.decode(
                     row['temporal_coordinates'])
 
@@ -55,6 +57,10 @@ class ViaCSVReader:
         result = csvfile_name.replace('.csv', '').replace(video_name + '_', '')
 
         result = re.sub(r'\(.*\)', '', result)
+        result = result.upper().replace(' ', '')
+
+        if result == '1_CUTTING-SALMON':
+            result = 'CUTTING-SALMON'
 
         return result
 

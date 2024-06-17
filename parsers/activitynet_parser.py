@@ -1,13 +1,18 @@
-import json
 import os
 import jsonpickle
 
-from models.taxonomy import Taxonomy
+from formats.activitynet.taxonomy import Taxonomy
+
 
 class ActivityNetParser:
     """
-    This class is responsible for parsing csv data into the ActivityNet format.
-    It provides methods to parse annotations from the data, get the taxonomy filename, and write the parsed data into a JSON file.
+    This class is responsible for parsing CSV data into the ActivityNet format. It includes functionalities for:
+    - Parsing annotations from the data, including video information and custom remarks.
+    - Mapping remarks to a specified format to enrich the annotations.
+    - Retrieving the taxonomy filename for categorization purposes.
+    - Writing the parsed and enriched data into a JSON file, adhering to the ActivityNet format.
+
+    This parser allows for the inclusion of additional metadata and custom processing of annotations, making the output more versatile for different applications.
     """
 
     def __init__(self, output_file: str, data):

@@ -14,10 +14,12 @@ class VideoExtractor:
 
     def get_info(self):
         try:
-            url = os.path.join(self.folder or os.getcwd(), self.filename)
+            url = os.path.normpath(os.path.join(
+                self.folder or os.getcwd(), self.filename))
             if os.path.exists(url):
                 video = VideoFileClip(url)
-                return (video.duration, video.size, url)
+                total_frames = int(video.fps * video.duration)
+                return (video.duration, video.size, url, total_frames)
             else:
                 return None
         except Exception as e:
