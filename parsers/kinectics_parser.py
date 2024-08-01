@@ -1,8 +1,40 @@
+import os
+import shutil
 
-class KinecticsParser:
-    def __init__(self, output_folder: str, data: list = None) -> None:
+
+class KineticsParser:
+    def __init__(self, output_folder: str, data: list = None, source_folder: str = "./source_videos") -> None:
         self.output_folder = output_folder
         self.data = data
+        self.source_folder = source_folder
+        # Define new paths for coarse and fine class folders and list files
+        self.coarse_train_folder = os.path.join(
+            output_folder, "nuylsushi/coarse/videos_train")
+        self.coarse_val_folder = os.path.join(
+            output_folder, "nuylsushi/coarse/videos_val")
+        self.fine_train_folder = os.path.join(
+            output_folder, "nuylsushi/fine/videos_train")
+        self.fine_val_folder = os.path.join(
+            output_folder, "nuylsushi/fine/videos_val")
+        self.coarse_train_list_path = os.path.join(
+            output_folder, "nuylsushi/nuylsushi_coarse_train_list_videos.txt")
+        self.coarse_val_list_path = os.path.join(
+            output_folder, "nuylsushi/nuylsushi_coarse_val_list_videos.txt")
+        self.fine_train_list_path = os.path.join(
+            output_folder, "nuylsushi/nuylsushi_fine_train_list_videos.txt")
+        self.fine_val_list_path = os.path.join(
+            output_folder, "nuylsushi/nuylsushi_fine_val_list_videos.txt")
+
+        self.fine_seg_train_list_path = os.path.join(
+            output_folder, "nuylsushi/nuylsushi_fine_seg_train_list_videos.txt")
+        self.fine_seg_val_list_path = os.path.join(
+            output_folder, "nuylsushi/nuylsushi_fine_seg_val_list_videos.txt")
+
+        # Ensure all folders exist
+        os.makedirs(self.coarse_train_folder, exist_ok=True)
+        os.makedirs(self.coarse_val_folder, exist_ok=True)
+        os.makedirs(self.fine_train_folder, exist_ok=True)
+        os.makedirs(self.fine_val_folder, exist_ok=True)
 
     def _generate_class_lists(self):
         """
@@ -34,7 +66,7 @@ class KinecticsParser:
         """
         Saves the counts of each coarse and fine class to a log file.
         """
-        log_path = self.output_folder + "class_counts_log.txt"
+        log_path = os.path.join(self.output_folder, "class_counts_log.txt")
         with open(log_path, "w") as log_file:
             log_file.write("Coarse Class Counts:\n")
             for classname, count in sorted(coarse_class_count.items()):
@@ -43,21 +75,52 @@ class KinecticsParser:
             for classname, count in sorted(fine_class_count.items()):
                 log_file.write(f"{classname}: {count}\n")
 
-    def _save_video_lists(self, coarse_class_list, fine_class_list):
+    def _save_video_lists(self, coarse_class_list, fine_class_list, split_ratio=0.8):
         """
-        Saves the coarse and fine video lists.
+        Saves the coarse and fine video lists and copies videos to the respective folders.
+        Adjusts for both training and validation data based on a split ratio.
         """
-        coarse_folder_path = self.output_folder + "coarse_videos.txt"
-        fine_folder_path = self.output_folder + "fine_videos.txt"
-        with open(coarse_folder_path, "w") as coarse_file, open(fine_folder_path, "w") as fine_file:
-            for annotation in self.data:
+        # Calculate split index
+        split_index = int(len(self.data) * split_ratio)
+
+        with open(self.coarse_train_list_path, "w") as coarse_train_file, \
+                open(self.fine_train_list_path, "w") as fine_train_file, \
+                open(self.coarse_val_list_path, "w") as coarse_val_file, \
+                open(self.fine_val_list_path, "w") as fine_val_file, \
+                open(self.fine_seg_train_list_path, "w") as fine_seg_train_file, \
+                open(self.fine_seg_val_list_path, "w") as fine_seg_val_file:
+
+            for i, annotation in enumerate(self.data):
                 coarse_class_number = coarse_class_list[annotation.label]
-                for ann in annotation.annotations:
-                    fine_class_number = fine_class_list[ann['label']]
-                    fine_file.write(f"{annotation.filename} {
-                                    fine_class_number}\n")
-                coarse_file.write(f"{annotation.filename} {
-                                  coarse_class_number}\n")
+                src_file_path = os.path.join(
+                    self.source_folder, annotation.filename)
+
+                if i < split_index:  # Training data
+                    shutil.copy(src_file_path, self.coarse_train_folder)
+                    coarse_train_file.write(f"{annotation.filename} {
+                                            coarse_class_number}\n")
+                    for ann in annotation.annotations:
+                        fine_class_number = fine_class_list[ann['label']]
+                        start_time, end_time = ann['segment']
+                        shutil.copy(src_file_path, self.fine_train_folder)
+
+                        fine_train_file.write(f"{annotation.filename} {
+                                              fine_class_number}\n")
+                        fine_seg_train_file.write(f"{annotation.filename} {start_time} {
+                            end_time} {fine_class_number}\n")
+                else:  # Validation data
+                    shutil.copy(src_file_path, self.coarse_val_folder)
+                    coarse_val_file.write(f"{annotation.filename} {
+                        coarse_class_number}\n")
+                    for ann in annotation.annotations:
+                        fine_class_number = fine_class_list[ann['label']]
+                        start_time, end_time = ann['segment']
+                        shutil.copy(src_file_path, self.fine_val_folder)
+
+                        fine_val_file.write(f"{annotation.filename} {
+                                            fine_class_number}\n")
+                        fine_seg_val_file.write(f"{annotation.filename} {start_time} {
+                            end_time} {fine_class_number}\n")
 
     def _save_class_lists(self, coarse_class_list, fine_class_list):
         """

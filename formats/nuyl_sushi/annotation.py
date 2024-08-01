@@ -12,7 +12,7 @@ class NUYLSushiAnnotation:
         self.weight_g = []
 
         self.image_sampling = self._create_image_sampling(
-            annotation.url, video_processor)
+            annotation.url, self.annotations, video_processor)
 
     def _convert_annotations(self, annotations):
         converted_annotations = []
@@ -25,9 +25,9 @@ class NUYLSushiAnnotation:
             converted_annotations.append(converted_annotation)
         return converted_annotations
 
-    def _create_image_sampling(self, filename, video_processor):
+    def _create_image_sampling(self, filename, annotations, video_processor):
         image_text_pairs = []
-        image_pairs = video_processor.process_video(filename)
+        image_pairs = video_processor.process_video(filename, annotations)
         for path, t in image_pairs:
             text_description = self._get_text_description_for_time(t)
             image_text_pairs.append({

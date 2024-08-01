@@ -14,7 +14,7 @@ from formats.nuyl_sushi.annotation import NUYLSushiAnnotation
 
 from parsers.basic_parser import BaseParser
 from parsers.activitynet_parser import ActivityNetParser
-from parsers.kinectics_parser import KinecticsParser
+from parsers.kinectics_parser import KineticsParser
 
 
 def _generate_next_video_id(target_folder):
@@ -99,8 +99,10 @@ def main(csv_folder: str, video_folder: str, output_folder):
         else:
             annotation.add_annotation(coordinates, label)
 
+    target_folder = './dataset/encode_videos'
     for annotation in annotations:
-        copied_path = _copy_and_rename_video(annotation.filename, video_folder)
+        copied_path = _copy_and_rename_video(
+            annotation.filename, video_folder, target_folder)
         annotation.url = copied_path
         annotation.view = _get_view(
             annotation.filename)
@@ -116,7 +118,7 @@ def main(csv_folder: str, video_folder: str, output_folder):
         parser.write_json_data()
 
         # Kinetics
-        parser = KinecticsParser(kinectics_path, annotations)
+        parser = KineticsParser(kinectics_path, annotations, target_folder)
         parser.save_annotation()
 
         # NUYLSushi
